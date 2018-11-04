@@ -1,0 +1,284 @@
+from textblob import TextBlob
+import re
+from numpy import *
+import numpy as np
+import math
+import scipy.io as sio
+from textblob import Word
+from nltk.tokenize import WordPunctTokenizer
+from nltk.corpus import stopwords
+import nltk
+nltk.download('stopwords')
+dict={}
+array={}
+
+train_num=15450                #训练文本数
+test_num=18828-train_num       #测试文本数
+#切词，得到词典dict与term在每个文档中的词频TF
+def create_dict():
+    str=""
+    key=0
+    count = 0
+    index = 0
+    fpath = "./20news-18828/train"
+    files = os.listdir(fpath)
+    for file in files:
+        spath = "./20news-18828/train/" + file
+        sfiles = os.listdir(spath)
+        i = 0
+        for sfile in sfiles:
+            increase=0
+            target=0
+            tpath = spath + "/" + sfile
+            print(tpath,i)
+            fopen = open(tpath, 'r',encoding="latin2")
+            lines = fopen.readlines()
+            for line in lines:
+                words = WordPunctTokenizer().tokenize(line)
+                if (len(words) != 0):
+                    for word in words:
+                        word = TextBlob(word)
+                        for w in word.words:
+                            w = w.singularize()  #复数变单数
+                            w = Word(w)
+                            w = w.lemmatize("v") #过去式变原型
+                            w = w.lower()        #term全部变成小写形式
+                            if (w not in dict.keys()):   #新词
+                                if (re.search('\d', w) == None and w != " " and w != "'" and len(w) >= 2 and len(w) <= 25):   #删去带有数字的term以及长度为1或者长度大于25的term
+                                    key += 1
+                                    dict[w] = []
+                                    for j in range(train_num):  #用一个列表表示键值对中的值，列表中的值为key在对应文档中的词频tf
+                                        dict[w].append(0)
+                                    dict[w][index] = 1
+                                    increase+=1
+                            else:
+                                dict[w][index] += 1             #已经存在与词典中，tf加一
+                                target+=1
+            index += 1
+            print(index,increase,target,"当前的词典长度",len(dict.keys()))
+    # print(key)
+
+#计算出现term的文档数，即文档频率DF
+def count_df():
+    count=0
+    for key in dict.keys():
+        df = 0
+        for j in range(train_num):
+            if(dict[key][j]!=0):
+                df+=1
+        dic1[key]=df
+        count+=1
+        print(key,df)
+#删除DF过大或者过小的词汇以及停用词
+def del_large():
+    f=open("pre_df.txt",'w',encoding="utf-8")
+    count = 0
+    for key in dic1.keys():
+        f.write(key+"\t"+str(dic1[key])+"\t")
+        if(dic1[key]>400  or dic1[key]<5 or key in stopwords.words('english')):
+            # print(key)
+            del dict[key]
+        count+=1
+
+#计算每个term的idf
+def count_idf():
+    for key in dic1.keys():
+        df[key]=math.log(train_num/dic1[key],10)
+
+#根据以上创建的词典，tf，idf，创建训练集中每个样本的vector，并将每一个类别的文档保存在一个mat文件中
+def create_matrix():
+    num_class=[800,800,800,800,800,800,800,800,800,800,800,800,800,800,800,800,800,700,450]  #后19个类别赌赢的文档数
+    sum=[700,1500,2300,3100,3900,4700,5500,6300,7100,7900,8700,9500,10300,11100,11900,12700,13500,14300,15000,] #前19个类别文档数的累加
+    tff=0
+    f=open("dict_df.txt",'w',encoding="utf-8")    #存放词典及词频df
+    #在创建矩阵的时候，要把每一行对应的key记录下来，用于测试
+    row=0
+    #先建立第一个类别的matrix，把向量中词典的顺序固定下来
+    matrix = np.zeros((len(dict), 700))
+    for key in dict.keys():
+        f.write(key + "\t" + str(dic1[key]) + "\n")
+        final_dic.append(key)  # 用这个列表来存储最终的词典的顺序，用在创建测试集的vector时使用
+        for i in range(700):
+            tff = dict[key][i]
+            if (tff > 0.0):
+                tf = 1 + math.log(tff, 10)
+            else:
+                tf = 0.0
+            matrix[row][i] = df[key] * tf
+        row+=1
+    sio.savemat('1.mat', {'Matrix': matrix})  #第一个类的文档的vector
+    row=0
+    for i in range(19):
+        matrix = np.zeros((len(dict), num_class[i]))
+        for key in final_dic:
+            for j in range(num_class[i]):
+                tff = dict[key][sum[i]+j]
+                if (tff > 0.0):
+                    tf = 1 + math.log(tff, 10)
+                else:
+                    tf = 0.0
+                matrix[row][j] = df[key] * tf
+            row+=1
+        row=0
+        index=i+2
+        sio.savemat(str(index)+'.mat', {'Matrix': matrix})   #依次保存后面19个类的文本的vector
+#根据上几步的结果，创建测试集的vector表示，并存在mat文件中，用于后续的knn分类
+def get_vectoroftest():
+    matrix_t = np.zeros((len(final_dic), test_num))
+    fpath = "./20news-18828/test/"
+    files = os.listdir(fpath)
+    index=0
+    fnum=0
+    for file in files:
+        spath = "./20news-18828/test/" + file
+        sfiles = os.listdir(spath)
+        for sfile in sfiles:
+            tpath = spath + "/" + sfile
+            print(tpath)
+            fopen = open(tpath, 'r', encoding="latin2")
+            lines = fopen.readlines()
+            for line in lines:
+                words = WordPunctTokenizer().tokenize(line)
+                if (len(words) != 0):
+                    for word in words:
+                        word = TextBlob(word)
+                        for w in word.words:
+                            w = w.singularize()
+                            w = Word(w)
+                            w = w.lemmatize("v")
+                            w = w.lower()
+                            if w in final_dic:
+                                index = final_dic.index(w)
+                                matrix_t[index][fnum] += 1
+            fnum += 1
+
+    #得到每个词的tf之后，求其权重
+    for i in range(len(final_dic)):
+        for j in range(test_num):
+            if(matrix_t[i][j]>0.0):
+                matrix_t[i][j]=(1+math.log(matrix_t[i][j],10))*df[final_dic[i]]
+    sio.savemat('matrix_test.mat', {'Matrix': matrix_t})
+    print("测试集矩阵创建结束")
+
+#计算两个向量的余弦值
+def cos(v1,v2):
+    dot_p=0.0
+    n1=0.0
+    n2=0.0
+    for a,b in zip(v1,v2):
+        dot_p +=a*b
+        n1 +=a**2
+        n2 +=b**2
+    if n1==0.0 or n2==0.0:
+        return None
+    else:
+        return dot_p/((n1*n2)**0.5)
+
+#对测试集中文档进行分类，并计算准确率
+def ACC():
+    acc=0
+    db = sio.loadmat("1.mat")['Matrix']
+    for i in range (19):
+        c=sio.loadmat(str(i+2)+".mat")['Matrix']
+        db=concatenate((db,c),axis=1)
+    print("数据库的维度是",db.shape)
+    t=sio.loadmat("matrix_test.mat")['Matrix']
+    print("测试集的维度：",t.shape)
+    print("要开始创建最终的计算结果啦，啦啦啦，开心！")
+
+    num_test=[99,272,457,639,800,980,1152,1342,1536,1730,1929,2120,2301,2491,2678,2875,2985,3125,3300,3378]
+        #对于求前k个，可以先求与每个类别中的最小的k个值，然后再比较这20*k个值中哪一个类最多
+    for i in range(test_num):
+        real=0
+        for k in range(20):
+            if i<num_test[k]:
+                real=k+1
+                break
+        print("这个测试样本属于第",real,"个类别")
+        res = np.zeros(train_num)
+        for j in range(db.shape[1]):
+            res[j]=cos(db[:,j],t[:,i])
+        index = np.argsort(res)  #从小到大排列，对于余弦值的话，应该是值越大越相似
+        sum=np.zeros(knn)
+        # print("最接近的knn个数：")
+        # print(res[train_num-knn:train_num])
+        for m in range(train_num-knn,train_num):
+            print(m)
+            if index[m] >= 0 and index[m] < 700:
+                    sum[0]+=1
+            elif index[m]>=700 and index[m]<1500:
+                    sum[1] += 1
+            elif index[m]>=1500 and index[m]<2300:
+                    sum[2] += 1
+            elif index[m]>=2300 and index[m]<3100:
+                    sum[3] += 1
+            elif index[m] >= 3100 and index[m]<3900:
+                    sum[4] += 1
+            elif index[m]>=3900 and index[m]<4700:
+                    sum[5] += 1
+            elif index[m]>=4700 and index[m]<5500:
+                    sum[6] += 1
+            elif index[m]>=5500 and index[m]<6300:
+                    sum[7] += 1
+            elif index[m]>=6300 and index[m]<7100:
+                    sum[8] += 1
+            elif index[m]>=7100 and index[m]>7900:
+                    sum[9] += 1
+            elif index[m]>=7900 and index[m]<8700:
+                    sum[10] += 1
+            elif index[m]>=8700 and index[m]<9500:
+                    sum[11] += 1
+            elif index[m] >= 9500 and index[m] < 10300:
+                    sum[12] += 1
+            elif index[m] >= 10300 and index[m] < 11100:
+                    sum[13] += 1
+            elif index[m] >= 11100 and index[m] < 11900:
+                    sum[14] += 1
+            elif index[m] >= 11900 and index[m] <12700:
+                    sum[15] += 1
+            elif index[m] >= 12700 and index[m] < 13500:
+                    sum[16] += 1
+            elif index[m] >= 13500 and index[m] < 14300:
+                    sum[17] += 1
+            elif index[m] >= 14300 and index[m] < 14900:
+                    sum[18] += 1
+            elif index[m] >= 14900 and index[m] < 15450:
+                    sum[19] += 1
+        print("Now is : ",i)
+        print(sum)
+        sum=sum.tolist()
+        get=sum.index(max(sum))+1
+        print("真实的类别是：",get)
+        if get==real:
+            acc+=1
+    print(acc)
+    print("Accuracy:",acc/test_num)
+if __name__=="__main__":
+    knn=10  #改变knn的值，求出knn不同时的准确率
+    # 计算每个term的文档频率
+    dic1 = {}
+    final_dic = []
+    tf_test = {}
+    create_dict()  #根据训练集构建词典
+    print(dict.keys())                    ################3
+    print("原始词典的长度",len(dict))
+    file=open("res.txt",'w',encoding="latin2")
+    f=open("df.txt",'w',encoding="latin2")
+    f1 = open("idf.txt", 'w', encoding="latin2")
+    row=0
+    count_df()
+    del_large()
+    print("按照df处理过的词典",len(dict)) ##########################
+    #因为可能会出先内存不足的情况，所以对于每一个类最终得到的值都存在一个mat文件中，这样到时候分类的时候也好分类
+    # num_class=[700,800,800,800,800,800,800,800,800,800,800,800,800,800,800,800,800,800,700,450]
+    df = {}#用一个词典来存储求得的idf
+    count_idf()
+    print("词典的idf处理结束，并存储在df这个词典中")
+    print("after idf")
+    # 计算每一个训练集中文档的向量
+    create_matrix()
+    # 输入测试集，得到其向量表示
+    get_vectoroftest()
+    #求出前k个与其最相近的文档，找到其所属于的类别 now
+    #计算平均准确率ave_acc
+    ACC()
