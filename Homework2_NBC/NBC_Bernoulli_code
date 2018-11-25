@@ -1,0 +1,180 @@
+import os
+from nltk.tokenize import WordPunctTokenizer
+from textblob import TextBlob,Word
+import numpy as np
+import re
+from nltk.corpus import stopwords
+C_num=np.zeros((20))#存储每个类别的样本数
+C_term=[]  #元素为字典，每一个字典包含对应单词在对应类别中包含该词的文件数
+C={}
+for i in range(20):
+    C_term.append(C)
+
+dict=[]  #训练集中出现的词汇表
+all_file=0
+PC=np.zeros((20))
+acc=0
+wronge=0
+dictionary={}
+df={}
+train_num=15450
+def TrainBernoulli():
+    fpath = "./train"
+    files = os.listdir(fpath)
+    cnum = 0
+    for file in files:
+        spath = fpath + "/" + file
+        sfiles = os.listdir(spath)
+        for sfile in sfiles:
+            newfile=1  #表示开始判断一个新的文件
+            tpath = spath + "/" + sfile
+            fopen = open(tpath, 'r', encoding="latin2")
+            lines = fopen.readlines()
+            for line in lines:
+                words = WordPunctTokenizer().tokenize(line)
+                if (len(words) != 0):
+                    for word in words:
+                        word = TextBlob(word)
+                        for w in word.words:
+                            w = w.singularize()  # 复数变单数
+                            w = Word(w)
+                            w = w.lemmatize("v")  # 过去式变原型
+                            w = w.lower()  # term全部变成小写形式
+                            # 我们把包含数字以及字母数小于3的词给剔除掉了
+                            if (w in dictionary.keys()):
+                                # if(w not in dict):
+                                #     dict.append(w)  #如果是个新词，将其加入到字典中
+                                #记录类C中包含某个词tk的文件数
+                                if(w not in C_term[cnum].keys()):  #这个词在这个类别中第一次出现
+                                    C_term[cnum][w]=1  #一个新词在改类别中的一个样本中出现
+                                    newfile=0
+                                elif(newfile==1):
+                                    C_term[cnum][w] +=1  #这个词又一次重新出现在一个新的文件中
+                                    newfile = 0
+            C_num[cnum] += 1  # 计算每个类别的文件数
+            global all_file
+            all_file+=1  #计算训练集中的文本数
+        cnum+=1
+        print(file)
+def TestBernoulli():
+    #先计算先验概率
+    for i in range(20):
+        PC[i]=C_num[i]/all_file
+    fpath = "./test"
+    files = os.listdir(fpath)
+    cnum = 0
+    for file in files:
+        spath = fpath + "/" + file
+        sfiles = os.listdir(spath)
+        for sfile in sfiles:  # 对每一个测试样本求其属于某一个类别的概率
+            fdic=[]  #用来记录当前文件中包含的在字典dict中的词
+            pb = np.ones((20))  # 记录当前的样本属于各个类别的概率
+            tpath = spath + "/" + sfile
+            # print(tpath, cnum)
+            fopen = open(tpath, 'r', encoding="latin2")
+            lines = fopen.readlines()
+            for line in lines:
+                words = WordPunctTokenizer().tokenize(line)
+                if (len(words) != 0):
+                    for word in words:
+                        word = TextBlob(word)
+                        for w in word.words:
+                            w = w.singularize()  # 复数变单数
+                            w = Word(w)
+                            w = w.lemmatize("v")  # 过去式变原型
+                            w = w.lower()  # term全部变成小写形式
+                            # 我们把包含数字以及字母数小于3的词给剔除掉了
+                            if (w in dictionary.keys()):  # 如果出现的是一个新词，在单词表中都没有出现过，则忽略
+                                #这个词在单词表中出现过
+                               fdic.append(w)  #fdic中存放了正在处理的文件所包含的全部有用的词
+            for i in range(20):
+                for word in dictionary.keys():
+                    if (word in fdic):
+                        pb[i] *= (C_term[i][word] + 1) / (C_num[i] + 2)
+                    else:
+                        pb[i] *= (1 - ((C_term[i][word] + 1) / (C_num[i] + 2)) )
+            index = pb.argsort()
+            pred = index[19]
+            print(pb)
+            if (cnum == pred):
+                global acc
+                acc += 1
+            else:
+                global wronge
+                wronge += 1
+            print("测试结果是:", pred, "真实类别:", cnum)
+        cnum+=1
+    print(acc+wronge,acc,wronge,"final result")
+    return acc
+
+def create_dict():
+    key=0
+    index = 0
+    fpath = "./train"
+    files = os.listdir(fpath)
+    for file in files:
+        spath = fpath+"/" + file
+        sfiles = os.listdir(spath)
+        i = 0
+        for sfile in sfiles:
+            increase=0
+            target=0
+            tpath = spath + "/" + sfile
+            print(tpath,i)
+            fopen = open(tpath, 'r',encoding="latin2")
+            lines = fopen.readlines()
+            for line in lines:
+                words = WordPunctTokenizer().tokenize(line)
+                if (len(words) != 0):
+                    for word in words:
+                        word = TextBlob(word)
+                        for w in word.words:
+                            w = w.singularize()  #复数变单数
+                            w = Word(w)
+                            w = w.lemmatize("v") #过去式变原型
+                            w = w.lower()        #term全部变成小写形式
+                            if (w not in dictionary.keys()):   #新词
+                                if (re.search('\d', w) == None and w != " " and w != "'" and len(w) >= 2 and len(w) <= 25):   #删去带有数字的term以及长度为1或者长度大于25的term
+                                    key += 1
+                                    dictionary[w] = []
+                                    for j in range(train_num):  #用一个列表表示键值对中的值，列表中的值为key在对应文档中的词频tf
+                                        dictionary[w].append(0)
+                                    dictionary[w][index] = 1
+                                    increase+=1
+                            else:
+                                dictionary[w][index] += 1             #已经存在与词典中，tf加一
+                                target+=1
+            index += 1
+            print(index,increase,target,"当前的词典长度",len(dictionary.keys()))
+#计算出现term的文档数，即文档频率DF
+def count_df():
+    print("start compute df!")
+    count=0
+    for key in dictionary.keys():
+        dff = 0
+        for j in range(train_num):
+            if(dictionary[key][j]!=0):
+                dff+=1
+        df[key]=dff
+        count+=1
+        print(key,dff)
+#删除DF过大或者过小的词汇以及停用词
+def del_large():
+    # f=open("pre_df.txt",'w',encoding="utf-8")
+    count = 0
+    for key in df.keys():
+        # f.write(key+"\t"+str(df[key])+"\t")
+        # if(df[key]>400  or df[key]<5 or key in stopwords.words('english')):
+        if ( df[key] < 5 or df[key]>500 or key in stopwords.words('english')):
+            # print(key)
+            del dictionary[key]
+        count+=1
+if __name__=="__main__":
+    create_dict()
+    count_df()
+    del_large()
+    print(len(dictionary.keys()))
+    TrainBernoulli()
+    acc=TestBernoulli()
+    print("分类准确率为:", acc / 3378)
+    print(C_num)
