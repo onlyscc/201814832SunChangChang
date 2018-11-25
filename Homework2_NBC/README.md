@@ -1,0 +1,3 @@
+NBC_MultiNomial_code 这个文件是多项式模型代码
+NBC_Bernoulli_code 这个文件是伯努利模型代码
+NBC_Mixed_type_code 这个文件是混合模型代码
