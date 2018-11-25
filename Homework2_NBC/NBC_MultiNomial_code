@@ -1,0 +1,198 @@
+import os
+from nltk.tokenize import WordPunctTokenizer
+from textblob import TextBlob,Word
+import numpy as np
+from nltk.corpus import stopwords
+import re
+import math
+all_word =0  #训练集中的单词总数
+dict=[]  #训练集中出现的单词词表
+C_term=[]  #元素为字典，每一个字典包含对应单词在对应类别中出现的次数
+C={}
+for i in range(20):
+    C_term.append(C)
+C_num=np.zeros((20))  #记录每一个类别中的单词总数
+PC=np.zeros((20))
+# C_word=np.zeros((20))# 存储每个类别中出现的单词数
+acc=0
+wronge=0
+dictionary={}
+train_num=15450
+df={}
+def TrainMultiNomial():
+    fpath="./train"
+    files=os.listdir(fpath)
+    cnum=0
+    for file in files:
+        cnum+=1
+        spath=fpath+"/"+file
+        sfiles=os.listdir(spath)
+        for sfile in sfiles:
+            tpath=spath+"/"+sfile
+            fopen=open(tpath,'r',encoding="latin2")
+            lines=fopen.readlines()
+            for line in lines:
+                words = WordPunctTokenizer().tokenize(line)
+                if (len(words) != 0):
+                    for word in words:
+                        word = TextBlob(word)
+                        for w in word.words:
+                            w = w.singularize()  # 复数变单数
+                            w = Word(w)
+                            w = w.lemmatize("v")  # 过去式变原型
+                            w = w.lower()  # term全部变成小写形式
+                            #我们把包含数字以及字母数小于3的词给剔除掉了
+                            # if(re.search('\d', w) == None and len(w) >= 3):
+                            if (w in dictionary.keys()):  #dictionary中的词代表着我们要作为训练集中出现的那个词
+                                # 训练集样本中的单词总数加1
+                                global all_word
+                                all_word += 1
+                                # C_word[cnum - 1]+=1  # 只要出现就加一，计算重复次数
+                                C_num[cnum - 1] += 1  # 对应类别的单词数目加一
+                                #下面制作一个词典表，长度即为我们需要的|V|
+                                if(w not in dict):
+                                    dict.append(w)
+                            #这里记录了每一个类别中对应term在该类别中出现的次数之和
+                                if w not in C_term[cnum-1].keys():
+                                    C_term[cnum-1][w]=1
+                                else:
+                                    C_term[cnum-1][w]+=1
+        print("第%d个类别数据处理完毕",cnum)
+    print("all_word",all_word)
+    print(C_num)
+def TestMultiNomial():
+    V=len(dict)  #训练集中出现的单词类数
+    fpath = "./test"
+    files = os.listdir(fpath)
+    cnum = 0
+    count=0
+    for file in files:
+        # print(file)
+        spath = fpath + "/" + file
+        sfiles = os.listdir(spath)
+        for sfile in sfiles:   #对每一个测试样本求其属于某一个类别的概率
+            count += 1
+            # pb=np.ones((20))  #记录当前的样本属于各个类别的概率
+            pb = np.zeros((20))
+            tpath = spath + "/" + sfile
+            print(tpath,cnum)
+            fopen = open(tpath, 'r', encoding="latin2")
+            lines = fopen.readlines()
+            for line in lines:
+                words = WordPunctTokenizer().tokenize(line)
+                if (len(words) != 0):
+                    for word in words:
+                        word = TextBlob(word)
+                        for w in word.words:
+                            w = w.singularize()  # 复数变单数
+                            w = Word(w)
+                            w = w.lemmatize("v")  # 过去式变原型
+                            w = w.lower()  # term全部变成小写形式
+                            # 我们把包含数字以及字母数小于3的词给剔除掉了
+                            if(w in dictionary.keys()):  #是可以当做term的词
+                                for i in range(20):
+                                    # if (w in C_term[i].keys()):  # 这个词在该类别中出现
+                                    #     pb[i] *= ((C_term[i][w] + 1) / (V + C_num[i]))
+                                    # else:
+                                    #     pb[i] *= (1 / (V + C_num[i]))  # 测试集中出现新的单词时，为了避免0的出现，采用滑动平均
+                                    if (w in C_term[i].keys()):  # 这个词在该类别中出现
+                                        pb[i] += math.log(((C_term[i][w] + 1) / (V + C_num[i])))
+                                    else:
+                                        pb[i] += math.log((1 / (V + C_num[i])))  # 测试集中出现新的单词时，为了避免0的出现，采用滑动平均
+
+            for i in range(20):
+                # pb[i]*=PC[i]
+                pb[i] += math.log(PC[i])
+            #对每个类别的概率进行从小到达排序，取最大的那个
+            index=pb.argsort()
+            pred=index[19]
+            print(pb)  #打印出最终的结果
+            if(cnum==pred):
+                global acc
+                acc+=1
+            else:
+                global wronge
+                wronge+=1
+            print("测试结果是:",pred,"真实类别:",cnum)
+        print("第%d个类别数据处理完毕", cnum)
+        cnum += 1
+    print(acc+wronge,acc,wronge,"final result")
+    return acc
+def create_dict():
+    key=0
+    index = 0
+    fpath = "./train"
+    files = os.listdir(fpath)
+    for file in files:
+        spath = fpath+"/" + file
+        sfiles = os.listdir(spath)
+        i = 0
+        for sfile in sfiles:
+            increase=0
+            target=0
+            tpath = spath + "/" + sfile
+            print(tpath,i)
+            fopen = open(tpath, 'r',encoding="latin2")
+            lines = fopen.readlines()
+            for line in lines:
+                words = WordPunctTokenizer().tokenize(line)
+                if (len(words) != 0):
+                    for word in words:
+                        word = TextBlob(word)
+                        for w in word.words:
+                            w = w.singularize()  #复数变单数
+                            w = Word(w)
+                            w = w.lemmatize("v") #过去式变原型
+                            w = w.lower()        #term全部变成小写形式
+                            if (w not in dictionary.keys()):   #新词
+                                if (re.search('\d', w) == None and w != " " and w != "'" and len(w) >= 2 and len(w) <= 25):   #删去带有数字的term以及长度为1或者长度大于25的term
+                                    key += 1
+                                    dictionary[w] = []
+                                    for j in range(train_num):  #用一个列表表示键值对中的值，列表中的值为key在对应文档中的词频tf
+                                        dictionary[w].append(0)
+                                    dictionary[w][index] = 1
+                                    increase+=1
+                            else:
+                                dictionary[w][index] += 1#已经存在与词典中，tf加一
+                                target+=1
+            index += 1
+            print(index,increase,target,"当前的词典长度",len(dictionary.keys()))
+#计算出现term的文档数，即文档频率DF
+def count_df():
+    print("start compute df!")
+    count=0
+    for key in dictionary.keys():
+        dff = 0
+        for j in range(train_num):
+            if(dictionary[key][j]!=0):
+                dff+=1
+        df[key]=dff
+        count+=1
+        print(key,dff)
+#删除DF过大或者过小的词汇以及停用词
+def del_large():
+    # f=open("pre_df.txt",'w',encoding="utf-8")
+    count = 0
+    for key in df.keys():
+        # f.write(key+"\t"+str(df[key])+"\t")
+        # if(df[key]>400  or df[key]<5 or key in stopwords.words('english')):
+        if ( df[key] < 20 or df[key]>500 or key in stopwords.words('english')):
+            # print(key)
+            del dictionary[key]
+        count+=1
+if __name__=="__main__":
+    print("Start!")
+    create_dict()
+    count_df()
+    del_large()
+    print(len(dictionary.keys()))
+    TrainMultiNomial()
+    # 计算每一个类别的先验概率
+    PC=np.zeros((20))
+    for i in range(20):
+        PC[i]=C_num[i]/all_word
+    print(PC)  #打印出先验概率
+    #acc代表分队的个数
+    # #测试集总个数为3378，训练集总个数为15450：
+    acc=TestMultiNomial()  #acc
+    print("分类准确率为:",acc/3378)
