@@ -1,0 +1,238 @@
+#coding=utf-8
+import codecs
+from sklearn import feature_extraction
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.cluster import KMeans
+from sklearn.cluster import MeanShift,estimate_bandwidth
+from sklearn.cluster import SpectralClustering
+from  sklearn.cluster import DBSCAN
+from sklearn.cluster import AffinityPropagation
+from sklearn.cluster import AgglomerativeClustering
+from sklearn import mixture
+from sklearn.mixture import GaussianMixture
+# from sklearn.cluster import
+# from sklearn.cluster import Word
+import math
+from sklearn import metrics
+
+def create_tfidf_vector():
+    corpus = []
+    path = "./Tweets.txt"
+    fpath = "./new_Tweets.txt"
+    result = codecs.open(fpath, "w", "utf-8")
+    for line in open(path, 'r').readlines():
+        # print(line)
+        res = line.split(",")[0].split(":")[1].split("\"")
+        res1 = line.split(",")[1].split(":")[1].split("}")[0]
+        result.write(res[1] + "\t" + res1 + "\n")
+        # print(res[1], res1)
+        corpus.append(res[1])
+
+    vectorizer = CountVectorizer()
+
+    transform = TfidfTransformer()
+
+    tfidf = transform.fit_transform(vectorizer.fit_transform(corpus))
+
+    words = vectorizer.get_feature_names()
+
+    weight = tfidf.toarray()
+
+    resName = "Tfidf_Result.txt"
+    result = codecs.open(resName, "w", "utf-8")
+    for j in range(len(words)):
+        result.write(words[j] + " ")
+    result.write("\r\n\r\n")
+
+    resName = "Tfidf_vector.txt"
+    result = codecs.open(resName, "w", "utf-8")
+    print(len(weight), len(words))
+    for i in range(len(weight)):
+        for j in range(len(words)):
+            result.write(str(weight[i][j]) + " ")
+        result.write("\n")
+    return weight
+def got_cluster():
+    labels=[]
+    #将每个样本已知的聚类从原始文本中抽离出来，写入一个新的文本中。
+    f=open("./new_Tweets.txt","r",encoding="utf-8")
+    f1=open("./cluster.txt","w",encoding="utf-8")
+    lines=f.readlines()
+    for line in lines:
+        res=line.split("\t")[1]
+        f1.write(res[1:])
+        labels.append((int)(res[1:]))
+    return labels
+
+def Kmeans():
+    print("Start Kmeans.")
+    #调用kmeans类
+    clf=KMeans(n_clusters=89)
+    #对于非监督机器学习，输入的数据是样本的特征，clf.fit(X)就可以把数据输入到分类器里
+    s=clf.fit(weight)
+    # print(s)
+    #89个中心点
+    # print(clf.cluster_centers_)
+    #每个样本属于的簇
+    # print(clf.labels_)
+    #用来评估簇的个数是否合适
+    #进行预测
+    #用分类器对未知数据进行分类，需要使用的是分类器的predict方法
+    pre_label=s.labels_
+    f=open("./label_result.txt","w",encoding="utf-8")
+    for i in pre_label:
+        f.write(str(i)+"\n")
+        return pre_label
+
+def affinity_propagation():
+    print("Start AF.")
+    af=AffinityPropagation(preference=-50).fit(weight)
+    cluster_centers_indices = af.cluster_centers_indices_
+    labels=af.labels_
+    n_clusters_=len(cluster_centers_indices)
+    return labels
+
+def mean_shift():
+    print("Start MS.")
+    # bandwidth=estimate_bandwidth(weight,quantile=0.2,n_samples=2472)
+    # ms=MeanShift(bandwidth=bandwidth)
+    ms=MeanShift()
+    ms.fit(weight)
+    labels=ms.labels_
+    got_cluster=ms.cluster_centers_
+    return labels
+
+def spectral_clustering():
+    print("Start SC.")
+    sc=SpectralClustering(n_clusters=89,assign_labels="discretize",random_state=0)
+    sc.fit(weight)
+    labels=sc.labels_
+    return labels
+
+def Ward_hierarchical_clustering_score():
+    print("Start WH.")
+    wh = SpectralClustering(n_clusters=89, assign_labels="discretize", random_state=0)
+    wh.fit(weight)
+    labels = wh.labels_
+    return labels
+
+def dbscan():
+    print("Start DB.")
+    db=DBSCAN().fit(weight)
+    labels=db.labels_
+    return labels
+
+def agglomerativeclustering():
+    print("Start AC.")
+    ac = AgglomerativeClustering( n_clusters=2472).fit(weight)
+    labels=ac.labels_
+    return labels
+
+def gaussian_mixtures():
+    print("Start GM")
+    gmm=GaussianMixture(n_components=89).fit(weight)
+    print("11111111")
+    labels=gmm.predict(weight)
+    print("22222222")
+    return labels
+#本次实验使用的是库中计算NMI的方法，但从网上查阅相关资料之后，自己也尝试编码实现了这种方法。
+# def compute_NMI():
+#     a_r={}  #将每个样本真实的cluster对应的样本存入字典
+#     a_p={}  #将每个样本预测的cluster对应的样本存入字典
+#     f1=open("./cluster.txt","r",encoding="utf-8")
+#     f2=open("./label_result.txt","r",encoding="utf-8")
+#     i=0
+#     #根据我们已有的cluster和实用聚类方法得到的cluster，找到每个cluster包含的文本索引
+#     for line in f1.readlines():
+#         e=line.split("\n")[0]
+#         if e not in a_r.keys():
+#             a_r[e]=[]
+#         a_r[e].append(i)
+#         i+=1
+#     i=0
+#     for line in f2.readlines():
+#         e=line.split("\n")[0]
+#         if e not in a_p.keys():
+#             a_p[e]=[]
+#         a_p[e].append(i)
+#         i+=1
+#     #在上面已经知道真实的cluster和通过kmeans方法得到的类别信息，下面根据公式计算互信息NMI
+#     #计算H(U)
+#     H_U=0
+#     for key in a_r.keys():
+#         p_i=len(a_r[key])/2472
+#         # print(p_i)
+#         H_U-=(p_i*math.log(p_i,2))
+#
+#     #计算H(V)
+#     H_V=0
+#     for key in a_p.keys():
+#         p_i=len(a_p[key])/2472
+#         # print(p_i)
+#         H_V-=(p_i*math.log(p_i,2))
+#     #计算MI(U,V)
+#     MI=0
+#     for key1 in a_r.keys():
+#         for key2 in a_p.keys():
+#             #先求出ij的交集
+#             l=list(set(a_r[key1]).intersection(set(a_p[key2])))
+#             if(len(l)==0):  #当loh真数出现0时，要略过
+#                 pass
+#             else:
+#                 p_ij = len(l) / 2472
+#                 p_i = len(a_r[key1]) / 2472
+#                 p_j = len(a_p[key2]) / 2472
+#                 m = p_i * p_j
+#                 MI += (p_ij * math.log(p_ij / m,2))
+#
+#     NMI=2*MI/(H_U+H_V)
+#     print("When use KMeans the NMI is:",NMI)
+
+if __name__=="__main__":
+    #根据sklearn自带包建立文本的向量空间模型，每一维都代表着对应word的tf-idf值
+    weight= create_tfidf_vector()
+    #将每个样本对应的类别号提取出来
+    labels=got_cluster()
+    print("here1")
+    print(labels)
+    print(len(labels))
+    #实用Kmeans方法对文本进行聚类
+    # pre_labels=Kmeans()
+    # print(pre_labels)
+    # print(len(pre_labels))
+    # #计算标准互信息，取值应该在0和1之间
+    # # compute_NMI()
+    Kmeans_NMI_score=metrics.normalized_mutual_info_score(labels,pre_labels)
+    print("Normalized Mutual Information of KMeans: %0.3f"%Kmeans_NMI_score)
+    #
+    # pre_labels=affinity_propagation()
+    # AF_NMI_score = metrics.normalized_mutual_info_score(labels, pre_labels)
+    # print("Normalized Mutual Information of AffinityPropagation: %0.3f" % AF_NMI_score)
+
+    # pre_labels=mean_shift()
+    # MeanShift_score = metrics.normalized_mutual_info_score(labels, pre_labels)
+    # print("Normalized Mutual Information of MeanShift: %0.3f" % MeanShift_score)
+    #
+    # pre_labels=spectral_clustering()
+    # SpectralClustering_score = metrics.normalized_mutual_info_score(labels, pre_labels)
+    # print("Normalized Mutual Information of SpectralClustering: %0.3f" % SpectralClustering_score)
+
+    # pre_labels = Ward_hierarchical_clustering()
+    # Ward_hierarchical_clustering_score = metrics.normalized_mutual_info_score(labels, pre_labels)
+    # print("Normalized Mutual Information of Ward hierarchical clustering: %0.3f" % Ward_hierarchical_clustering_score)
+
+
+    # pre_labels=agglomerativeclustering()
+    # AgglomerativeClustering_score = metrics.normalized_mutual_info_score(labels, pre_labels)
+    # print("Normalized Mutual Information of DBSCAN: %0.3f" % AgglomerativeClustering_score)
+
+    # pre_labels=dbscan()
+    # DBSCAN_score = metrics.normalized_mutual_info_score(labels,pre_labels)
+    # print("Normalized Mutual Information of DBSCAN: %0.3f" % DBSCAN_score)
+
+    # pre_labels=gaussian_mixtures()
+    # GaussianMixtures_score = metrics.normalized_mutual_info_score(labels,pre_labels)
+    # print("Normalized Mutual Information of GaussianMixtures: %0.3f" % GaussianMixtures_score)
+
+
